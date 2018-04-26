@@ -16,7 +16,7 @@
  */
 
 nf._ = (function () {
-    var locale = "en";
+    var locale = "cn";
     var en = {
         "nf-actions.UpdateResource": "Update Resource",
         "nf-actions.Refreshing": "Refreshing",
