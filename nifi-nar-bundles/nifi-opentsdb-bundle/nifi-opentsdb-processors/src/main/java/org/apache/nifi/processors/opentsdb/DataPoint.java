@@ -36,6 +36,13 @@ public class DataPoint {
     public DataPoint() {
     }
 
+    public DataPoint(long timestamp, String metric, double value, Map<String, String> tags) {
+        this.timestamp = timestamp;
+        this.metric = metric;
+        this.value = value;
+        this.tags = tags;
+    }
+
     public long getTimestamp() {
         return timestamp;
     }
