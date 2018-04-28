@@ -172,18 +172,20 @@ public class ConvertToDataPoint extends AbstractProcessor {
 
     @Override
     public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
-        FlowFile flowFile = session.get();
-        if (flowFile == null) {
+        List<FlowFile> flowFiles = session.get(batchSize);
+        if (flowFiles.isEmpty()) {
             return;
         }
 
-        final List<DataPoint> points = toDataPoint(flowFile, session);
-        if (null == points || points.isEmpty()) {
-            session.transfer(flowFile, REL_FAILURE);
-        } else {
-            session.write(flowFile, out -> out.write(JSONArray.toJSONBytes(points)));
-            session.transfer(flowFile, REL_SUCCESS);
-        }
+        flowFiles.forEach(flowFile -> {
+            final List<DataPoint> points = toDataPoint(flowFile, session);
+            if (null == points || points.isEmpty()) {
+                session.transfer(flowFile, REL_FAILURE);
+            } else {
+                session.write(flowFile, out -> out.write(JSONArray.toJSONBytes(points)));
+                session.transfer(flowFile, REL_SUCCESS);
+            }
+        });
     }
 
     private List<DataPoint> toDataPoint(final FlowFile flowFile, final ProcessSession session) {
@@ -224,9 +226,14 @@ public class ConvertToDataPoint extends AbstractProcessor {
         }
 
         return metrics.stream().map(metric -> {
-            Map<String, String> tags = new HashMap<>(1);
-            tags.put("machineId", machineId);
-            return new DataPoint(timestamp, metric.getMetric(), obj.getDouble(metric.getMetric()), tags);
-        }).collect(Collectors.toList());
+            Double value = obj.getDouble(metric.getField());
+            if (null != value) {
+                Map<String, String> tags = new HashMap<>(1);
+                tags.put("machineId", machineId);
+                return new DataPoint(timestamp, metric.getMetric(), value, tags);
+            } else {
+                return null;
+            }
+        }).filter(dataPoint -> dataPoint != null).collect(Collectors.toList());
     }
 }
