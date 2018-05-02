@@ -18,7 +18,10 @@ package org.apache.nifi.processors.opentsdb;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
-import okhttp3.*;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.apache.commons.io.IOUtils;
 import org.apache.nifi.annotation.behavior.EventDriven;
 import org.apache.nifi.annotation.behavior.InputRequirement;
@@ -56,8 +59,6 @@ import static org.apache.commons.lang3.StringUtils.trimToEmpty;
         "The default port for the REST API is 4242.")
 public class PutOpenTSDBHttp extends AbstractOkHttpProcessor {
 
-    private static final int size = 250;
-
     private static final Relationship REL_SUCCESS = new Relationship.Builder().name("Success")
             .description("All FlowFiles that are written to OpenTSDB are routed to this relationship").build();
 
@@ -69,6 +70,8 @@ public class PutOpenTSDBHttp extends AbstractOkHttpProcessor {
     private List<PropertyDescriptor> descriptors;
 
     private Set<Relationship> relationships;
+
+    private volatile URL url;
 
     @Override
     protected void init(ProcessorInitializationContext context) {
@@ -98,6 +101,13 @@ public class PutOpenTSDBHttp extends AbstractOkHttpProcessor {
 
     @OnScheduled
     public void setup(ProcessContext context) {
+        final String baseUrl = trimToEmpty(context.getProperty(HTTP_URL).evaluateAttributeExpressions().getValue());
+        try {
+            url = new URL((baseUrl.endsWith("/") ? baseUrl : baseUrl + "/") + "api/put?details");
+        } catch (MalformedURLException e) {
+            throw new ProcessException(e);
+        }
+
         super.createOkHttpClient(context);
     }
 
@@ -108,20 +118,30 @@ public class PutOpenTSDBHttp extends AbstractOkHttpProcessor {
             return;
         }
 
-        final String baseUrl = trimToEmpty(context.getProperty(HTTP_URL).evaluateAttributeExpressions().getValue());
-        final URL url;
-
-        try {
-            url = new URL((baseUrl.endsWith("/") ? baseUrl : baseUrl + "/") + "api/put?details");
-        } catch (MalformedURLException e) {
-            throw new ProcessException(e);
-        }
-
         final StringBuilder content = new StringBuilder();
         session.read(flowFile, in -> content.append(IOUtils.toString(in, "UTF-8")));
-        List<DataPoint> dataPoints = JSONObject.parseArray(content.toString(), DataPoint.class);
+        List<DataPoint> dataPoints = new ArrayList<>();
+
+        final String json = content.toString().trim();
+        if (json.startsWith("[")) {
+            dataPoints = JSONObject.parseArray(content.toString(), DataPoint.class);
+        } else if (json.startsWith("{")) {
+            final DataPoint tempDP = JSONObject.parseObject(json, DataPoint.class);
+            if (tempDP != null) {
+                dataPoints.add(tempDP);
+            }
+        } else {
+            logger.error("exepct json start with '[' or '{', but: " + json);
+        }
 
         final int dataPointsSize = dataPoints.size();
+
+        if (dataPointsSize == 0) {
+            session.transfer(flowFile, REL_FAILURE);
+        }
+
+        final int size = 250;
+
         int index = 0;
         do {
             final int start = index * size;
