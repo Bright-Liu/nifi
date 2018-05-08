@@ -193,7 +193,7 @@ public class ConvertToDataPoint extends AbstractProcessor {
         session.read(flowFile, in -> json.append(IOUtils.toString(in, "UTF-8")));
 
         final String fileName = flowFile.getAttribute("filename");
-        final String machineId = fileName.replace(".csv", "").replace("_5s", "").substring(fileName.indexOf("PF_F"));
+        final String machineId = fileName.replace(".csv", "");
 
         JSONObject jsonObject;
         try {
