@@ -196,7 +196,8 @@ public class PutOpenTSDBHttp extends AbstractOkHttpProcessor {
                 responseBody.close();
             }
         } else {  // 1xx, 3xx, 4xx, 5xx, etc.
-            logger.warn("OpenTSDB returned code[{}] with message: {}, transferring flow file to failure", new Object[]{statusCode, response.message()});
+            logger.debug(JSONArray.toJSONString(dataPoints));
+            logger.warn("OpenTSDB returned code[{}] with message: {}, transferring flow file to failure", new Object[]{statusCode, response.toString()});
         }
         return false;
     }
